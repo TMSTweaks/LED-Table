@@ -41,10 +41,65 @@ product: Peripherals v1.0
 /* This is a template for board specific configuration created by MCUXpresso IDE Project Wizard.*/
 
 #include "peripherals.h"
+#include "fsl_gpio.h"
+#include "fsl_tpm.h"
+
+
+#define TPM_SOURCE_CLOCK CLOCK_GetFreq(kCLOCK_PllFllSelClk)
 
 /**
  * @brief Set up and initialize all required blocks and functions related to the peripherals hardware.
  */
+
+void BOARD_InitGPIO(void) {
+
+	/*gpio_pin_config_t pinAConfig = {
+			kGPIO_DigitalOutput,
+			1
+	};
+
+	GPIO_PinInit(GPIOA, 1, &pinAConfig); */
+
+}
+
+void BOARD_InitTPM(void) {
+	tpm_config_t tpmInfo = {
+			  .prescale = kTPM_Prescale_Divide_1,
+			  .useGlobalTimeBase = false,
+			  .triggerSelect = kTPM_Trigger_Select_0,
+			  .enableDoze = false,
+			  .enableDebugMode = false,
+			  .enableReloadOnTrigger = false,
+			  .enableStopOnOverflow = false,
+			  .enableStartOnTrigger = false,
+	};
+	tpm_chnl_pwm_signal_param_t tpmParam[] = {
+			{
+					.chnlNumber = 0,
+					.level = kTPM_LowTrue,
+					.dutyCyclePercent = 10U
+			},
+			{
+					.chnlNumber = 1,
+					.level = kTPM_LowTrue,
+					.dutyCyclePercent = 10U
+			}
+	};
+
+	CLOCK_SetTpmClock(1U);
+
+	TPM_Init(TPM2, &tpmInfo);
+
+	TPM_SetupPwm(TPM2, tpmParam, 2U, kTPM_EdgeAlignedPwm, 24000U, TPM_SOURCE_CLOCK);
+	TPM_StartTimer(TPM2, kTPM_SystemClock);
+
+
+}
+
 void BOARD_InitBootPeripherals(void) {
 	/* The user initialization should be placed here */
+	//BOARD_InitGPIO();
+	BOARD_InitTPM();
+
 }
+

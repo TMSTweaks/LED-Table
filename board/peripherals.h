@@ -46,6 +46,8 @@ extern "C" {
  * @brief 	Initialize peripherals specific settings.
  */
 void BOARD_InitBootPeripherals(void);
+void BOARD_InitGPIO(void);
+void BOARD_InitTPM(void);
 
 #if defined(__cplusplus)
 }

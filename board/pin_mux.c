@@ -78,13 +78,9 @@ void BOARD_InitBootPins(void) {
 void BOARD_InitPins(void) {
   CLOCK_EnableClock(kCLOCK_PortA);                           /* Port A Clock Gate Control: Clock enabled */
 
-  PORT_SetPinMux(PORTA, PIN1_IDX, kPORT_MuxAlt2);            /* PORTA1 (pin 27) is configured as UART0_RX */
-  PORT_SetPinMux(PORTA, PIN2_IDX, kPORT_MuxAlt2);            /* PORTA2 (pin 28) is configured as UART0_TX */
-  SIM->SOPT5 = ((SIM->SOPT5 &
-    (~(SIM_SOPT5_UART0TXSRC_MASK | SIM_SOPT5_UART0RXSRC_MASK))) /* Mask bits to zero which are setting */
-      | SIM_SOPT5_UART0TXSRC(SOPT5_UART0TXSRC_UART_TX)       /* UART0 transmit data source select: UART0_TX pin */
-      | SIM_SOPT5_UART0RXSRC(SOPT5_UART0RXSRC_UART_RX)       /* UART0 receive data source select: UART0_RX pin */
-    );
+  PORT_SetPinMux(PORTA, PIN1_IDX, kPORT_MuxAlt3);            /* PORTA1 (pin 27) is configured as UART0_RX */
+  PORT_SetPinMux(PORTA, PIN2_IDX, kPORT_MuxAlt3);
+
 }
 
 /*******************************************************************************
