@@ -39,13 +39,48 @@
 #include "clock_config.h"
 #include "MKL25Z4.h"
 #include "fsl_debug_console.h"
-/* TODO: insert other include files here. */
+#include "LED-Table.h"
 
-/* TODO: insert other definitions and declarations here. */
+#define TPM_SOURCE_CLOCK CLOCK_GetFreq(kCLOCK_PllFllSelClk)
+
 
 /*
  * @brief   Application entry point.
  */
+
+void BOARD_InitTPM(void) {
+	tpm_config_t tpmInfo = {
+			  .prescale = kTPM_Prescale_Divide_1,
+			  .useGlobalTimeBase = false,
+			  .triggerSelect = kTPM_Trigger_Select_0,
+			  .enableDoze = false,
+			  .enableDebugMode = false,
+			  .enableReloadOnTrigger = false,
+			  .enableStopOnOverflow = false,
+			  .enableStartOnTrigger = false,
+	};
+	tpm_chnl_pwm_signal_param_t tpmParam[] = {
+			{
+					.chnlNumber = 0,
+					.level = kTPM_LowTrue,
+					.dutyCyclePercent = 0U
+			},
+	};
+
+	CLOCK_SetTpmClock(1U);
+
+	TPM_Init(TPM2, &tpmInfo);
+
+	TPM_SetupPwm(TPM2, tpmParam, 1U, kTPM_EdgeAlignedPwm, 800000U, TPM_SOURCE_CLOCK);
+	TPM_StartTimer(TPM2, kTPM_SystemClock);
+
+}
+
+void InitLED(void) {
+	BOARD_InitTPM();
+}
+
+
 int main(void) {
 
     /* Init board hardware. */
@@ -57,9 +92,6 @@ int main(void) {
     BOARD_InitDebugConsole();
 #endif
 
-
-
-
-
+    InitLED();
 
 }

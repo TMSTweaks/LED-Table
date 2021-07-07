@@ -47,7 +47,7 @@ extern "C" {
  */
 void BOARD_InitBootPeripherals(void);
 void BOARD_InitGPIO(void);
-void BOARD_InitTPM(void);
+//void BOARD_InitTPM(void);
 
 #if defined(__cplusplus)
 }
