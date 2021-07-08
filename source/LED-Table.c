@@ -72,6 +72,9 @@ void BOARD_InitTPM(void) {
 	TPM_Init(TPM2, &tpmInfo);
 
 	TPM_SetupPwm(TPM2, tpmParam, 1U, kTPM_EdgeAlignedPwm, 800000U, TPM_SOURCE_CLOCK);
+
+	TPM2->CONTROLS[0].CnSC |= 1UL << 0;
+
 	TPM_StartTimer(TPM2, kTPM_SystemClock);
 
 }
