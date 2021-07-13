@@ -43,6 +43,17 @@
 
 #define TPM_SOURCE_CLOCK CLOCK_GetFreq(kCLOCK_PllFllSelClk)
 
+#define DMA_CHANNEL 0
+#define DMA_SOURCE 63 //34 - TPM2 Channel 0 / 56 - TPM2 Overflow / 35 - TPM Channel 1
+
+
+dma_handle_t g_DMA_Handle;
+volatile bool g_DMA_Transfer_Complete;
+
+void DMA_Callback(dma_handle_t *handle, void *param)
+{
+    g_DMA_Transfer_Complete = true;
+}
 
 /*
  * @brief   Application entry point.
@@ -76,6 +87,22 @@ void BOARD_InitTPM(void) {
 	TPM2->CONTROLS[0].CnSC |= 1UL << 0;
 
 	TPM_StartTimer(TPM2, kTPM_SystemClock);
+
+}
+
+void BOARD_InitDMA(void) {
+
+	dma_transfer_config_t transferConfig;
+
+	DMAMUX_Init(DMAMUX0);
+	DMAMUX_SetSource(DMAMUX0, DMA_CHANNEL, DMA_SOURCE);
+	DMAMUX_EnableChannel(DMAMUX0, DMA_CHANNEL);
+
+	DMA_Init(DMA0);
+	DMA_CreateHandle(&g_DMA_Handle, DMA0, DMA_CHANNEL);
+	DMA_SetCallback(&g_DMA_Handle, DMA_Callback, NULL);
+
+
 
 }
 
