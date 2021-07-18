@@ -44,7 +44,7 @@
 #define TPM_SOURCE_CLOCK CLOCK_GetFreq(kCLOCK_PllFllSelClk)
 
 #define DMA_CHANNEL 0
-#define DMA_SOURCE 63 //34 - TPM2 Channel 0 / 56 - TPM2 Overflow / 35 - TPM Channel 1
+#define DMA_SOURCE 63 //34 - TPM2 Channel 0 / 56 - TPM2 Overflow / 35 - TPM2 Channel 1
 
 
 dma_handle_t g_DMA_Handle;
@@ -73,26 +73,43 @@ void BOARD_InitTPM(void) {
 	tpm_chnl_pwm_signal_param_t tpmParam[] = {
 			{
 					.chnlNumber = 0,
-					.level = kTPM_LowTrue,
-					.dutyCyclePercent = 0U
+					.level = kTPM_NoPwmSignal,
+					.dutyCyclePercent = 18U
 			},
+			{
+					.chnlNumber = 1,
+					.level = kTPM_NoPwmSignal,
+					.dutyCyclePercent = 37U
+			}
 	};
 
 	CLOCK_SetTpmClock(1U);
 
 	TPM_Init(TPM2, &tpmInfo);
+	TPM_SetupPwm(TPM2, tpmParam, 2U, kTPM_EdgeAlignedPwm, 5000U, TPM_SOURCE_CLOCK);
+	TPM_EnableInterrupts(TPM2, kTPM_Chnl0InterruptEnable | kTPM_Chnl1InterruptEnable | kTPM_TimeOverflowInterruptEnable);
 
-	TPM_SetupPwm(TPM2, tpmParam, 1U, kTPM_EdgeAlignedPwm, 800000U, TPM_SOURCE_CLOCK);
 
 	TPM2->CONTROLS[0].CnSC |= 1UL << 0; //Enable DMA requests for Channel 0
+	TPM2->CONTROLS[1].CnSC |= 1UL << 0; //Enable DMA requests for Channel 1
+	TPM2->SC |= TPM_SC_DMA_MASK;
 
-	TPM_StartTimer(TPM2, kTPM_SystemClock);
 
 }
 
 void BOARD_InitDMA(void) {
 
+	g_DMA_Transfer_Complete = false;
+
 	dma_transfer_config_t transferConfig;
+	transferConfig.srcAddr = (uint32_t)(1 << 1);
+	transferConfig.destAddr = (uint32_t)&GPIOA->PTOR;
+	transferConfig.enableSrcIncrement = false;
+	transferConfig.enableDestIncrement = false;
+	transferConfig.srcSize = kDMA_Transfersize32bits;
+	transferConfig.destSize = kDMA_Transfersize32bits;
+	transferConfig.transferSize = sizeof(uint32_t);
+
 
 	DMAMUX_Init(DMAMUX0);
 	DMAMUX_SetSource(DMAMUX0, DMA_CHANNEL, DMA_SOURCE);
@@ -102,12 +119,21 @@ void BOARD_InitDMA(void) {
 	DMA_CreateHandle(&g_DMA_Handle, DMA0, DMA_CHANNEL);
 	DMA_SetCallback(&g_DMA_Handle, DMA_Callback, NULL);
 
+	DMA_SetTransferConfig(DMA0, 0, &transferConfig);
+	DMA_EnableChannelRequest(DMA0, 0);
+	DMA_EnableInterrupts(DMA0, 0);
+
+
 
 
 }
 
 void InitLED(void) {
 	BOARD_InitTPM();
+	BOARD_InitDMA();
+
+	TPM_StartTimer(TPM2, kTPM_SystemClock);
+
 }
 
 
@@ -123,5 +149,5 @@ int main(void) {
 #endif
 
     InitLED();
-
+    while(1);
 }

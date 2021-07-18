@@ -52,20 +52,19 @@ product: Peripherals v1.0
 
 void BOARD_InitGPIO(void) {
 
-	/*gpio_pin_config_t pinAConfig = {
+	gpio_pin_config_t pinAConfig = {
 			kGPIO_DigitalOutput,
-			1
+			0
 	};
 
-	GPIO_PinInit(GPIOA, 1, &pinAConfig);*/
+	GPIO_PinInit(GPIOA, 1, &pinAConfig);
 
 }
 
 
 void BOARD_InitBootPeripherals(void) {
 	/* The user initialization should be placed here */
-	//BOARD_InitGPIO();
-	//BOARD_InitTPM();
+	BOARD_InitGPIO();
 
 }
 

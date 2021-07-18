@@ -78,8 +78,8 @@ void BOARD_InitBootPins(void) {
 void BOARD_InitPins(void) {
   CLOCK_EnableClock(kCLOCK_PortA);                           /* Port A Clock Gate Control: Clock enabled */
 
-  PORT_SetPinMux(PORTA, PIN1_IDX, kPORT_MuxAlt3);            /* PORTA1 (pin 27) is configured as UART0_RX */
-  PORT_SetPinMux(PORTA, PIN2_IDX, kPORT_MuxAlt3);
+  PORT_SetPinMux(PORTA, PIN1_IDX, kPORT_MuxAsGpio);            /* PORTA1 (pin 27) is configured as UART0_RX */
+  PORT_SetPinMux(PORTA, PIN2_IDX, kPORT_MuxAsGpio);
 
 }
 
