@@ -90,8 +90,8 @@ void BOARD_InitTPM(void) {
 	TPM_EnableInterrupts(TPM2, kTPM_Chnl0InterruptEnable | kTPM_Chnl1InterruptEnable | kTPM_TimeOverflowInterruptEnable);
 
 
-	TPM2->CONTROLS[0].CnSC |= 1UL << 0; //Enable DMA requests for Channel 0
-	TPM2->CONTROLS[1].CnSC |= 1UL << 0; //Enable DMA requests for Channel 1
+	//TPM2->CONTROLS[0].CnSC |= 1UL << 0; //Enable DMA requests for Channel 0
+	//TPM2->CONTROLS[1].CnSC |= 1UL << 0; //Enable DMA requests for Channel 1
 	TPM2->SC |= TPM_SC_DMA_MASK;
 
 
@@ -103,7 +103,7 @@ void BOARD_InitDMA(void) {
 
 	dma_transfer_config_t transferConfig;
 	transferConfig.srcAddr = (uint32_t)(1 << 1);
-	transferConfig.destAddr = (uint32_t)&GPIOA->PTOR;
+	transferConfig.destAddr = (uint32_t)&GPIOA->PCOR;
 	transferConfig.enableSrcIncrement = false;
 	transferConfig.enableDestIncrement = false;
 	transferConfig.srcSize = kDMA_Transfersize32bits;
