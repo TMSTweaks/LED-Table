@@ -43,16 +43,25 @@
 
 #define TPM_SOURCE_CLOCK CLOCK_GetFreq(kCLOCK_PllFllSelClk)
 
-#define DMA_CHANNEL 0
-#define DMA_SOURCE 63 //34 - TPM2 Channel 0 / 56 - TPM2 Overflow / 35 - TPM2 Channel 1
+
+#define DMA_CHANNEL_0 0
+#define DMA_CHANNEL_1 1
+#define DMA_CHANNEL_2 2
+#define TPM2_OF 56 //34 - TPM2 Channel 0 / 56 - TPM2 Overflow / 35 - TPM2 Channel 1 //DMA SOURCE
+#define TPM2_C0_OF 34
+#define TPM2_C1_OF 35
 
 
 dma_handle_t g_DMA_Handle;
 volatile bool g_DMA_Transfer_Complete;
+static const uint32_t resetValue = (1<<19);
+static const uint32_t resetDValue = (1<<1);
+static const uint32_t reset18Value = (1<<18);
 
 void DMA_Callback(dma_handle_t *handle, void *param)
 {
     g_DMA_Transfer_Complete = true;
+
 }
 
 /*
@@ -65,7 +74,7 @@ void BOARD_InitTPM(void) {
 			  .useGlobalTimeBase = false,
 			  .triggerSelect = kTPM_Trigger_Select_0,
 			  .enableDoze = false,
-			  .enableDebugMode = false,
+			  .enableDebugMode = true,
 			  .enableReloadOnTrigger = false,
 			  .enableStopOnOverflow = false,
 			  .enableStartOnTrigger = false,
@@ -90,8 +99,8 @@ void BOARD_InitTPM(void) {
 	TPM_EnableInterrupts(TPM2, kTPM_Chnl0InterruptEnable | kTPM_Chnl1InterruptEnable | kTPM_TimeOverflowInterruptEnable);
 
 
-	//TPM2->CONTROLS[0].CnSC |= 1UL << 0; //Enable DMA requests for Channel 0
-	//TPM2->CONTROLS[1].CnSC |= 1UL << 0; //Enable DMA requests for Channel 1
+	TPM2->CONTROLS[0].CnSC |= 1UL << 0; //Enable DMA requests for Channel 0
+	TPM2->CONTROLS[1].CnSC |= 1UL << 0; //Enable DMA requests for Channel 1
 	TPM2->SC |= TPM_SC_DMA_MASK;
 
 
@@ -101,27 +110,68 @@ void BOARD_InitDMA(void) {
 
 	g_DMA_Transfer_Complete = false;
 
+	DMAMUX_Init(DMAMUX0);
+	DMA_Init(DMA0);
+
+
+	/* Setup DMA Channel 0 */
+	dma_transfer_config_t transferConfig0;
+	memset(&transferConfig0, 0, sizeof(transferConfig0));
+	transferConfig0.srcAddr = (uint32_t)&resetDValue;
+	transferConfig0.destAddr = (uint32_t)&GPIOD->PCOR;
+	transferConfig0.enableSrcIncrement = false;
+	transferConfig0.enableDestIncrement = false;
+	transferConfig0.srcSize = kDMA_Transfersize32bits;
+	transferConfig0.destSize = kDMA_Transfersize32bits;
+	transferConfig0.transferSize = sizeof(resetValue);
+
+	DMAMUX_SetSource(DMAMUX0, DMA_CHANNEL_0, TPM2_C0_OF);
+	DMAMUX_EnableChannel(DMAMUX0, DMA_CHANNEL_0);
+
+	DMA_SetTransferConfig(DMA0, DMA_CHANNEL_0, &transferConfig0);
+	DMA_EnableChannelRequest(DMA0, DMA_CHANNEL_0);
+	DMA_EnableCycleSteal(DMA0, DMA_CHANNEL_0, true);
+
+	/* Setup DMA Channel 1 */
+	dma_transfer_config_t transferConfig1;
+	memset(&transferConfig1, 0, sizeof(transferConfig1));
+	transferConfig1.srcAddr = (uint32_t)&reset18Value;
+	transferConfig1.destAddr = (uint32_t)&GPIOB->PCOR;
+	transferConfig1.enableSrcIncrement = false;
+	transferConfig1.enableDestIncrement = false;
+	transferConfig1.srcSize = kDMA_Transfersize32bits;
+	transferConfig1.destSize = kDMA_Transfersize32bits;
+	transferConfig1.transferSize = sizeof(resetValue);
+
+	DMAMUX_SetSource(DMAMUX0, DMA_CHANNEL_1, TPM2_C1_OF);
+	DMAMUX_EnableChannel(DMAMUX0, DMA_CHANNEL_1);
+
+	DMA_SetTransferConfig(DMA0, DMA_CHANNEL_1, &transferConfig1);
+	DMA_EnableChannelRequest(DMA0, DMA_CHANNEL_1);
+	DMA_EnableCycleSteal(DMA0, DMA_CHANNEL_1, true);
+
+
+	/* Setup DMA Channel 2 */
 	dma_transfer_config_t transferConfig;
-	transferConfig.srcAddr = (uint32_t)(1 << 1);
-	transferConfig.destAddr = (uint32_t)&GPIOA->PCOR;
+	memset(&transferConfig, 0, sizeof(transferConfig));
+	transferConfig.srcAddr = (uint32_t)&resetValue;
+	transferConfig.destAddr = (uint32_t)&GPIOB->PCOR;
 	transferConfig.enableSrcIncrement = false;
 	transferConfig.enableDestIncrement = false;
 	transferConfig.srcSize = kDMA_Transfersize32bits;
 	transferConfig.destSize = kDMA_Transfersize32bits;
-	transferConfig.transferSize = sizeof(uint32_t);
+	transferConfig.transferSize = sizeof(resetValue);
 
+	DMAMUX_SetSource(DMAMUX0, DMA_CHANNEL_2, TPM2_OF);
+	DMAMUX_EnableChannel(DMAMUX0, DMA_CHANNEL_2);
 
-	DMAMUX_Init(DMAMUX0);
-	DMAMUX_SetSource(DMAMUX0, DMA_CHANNEL, DMA_SOURCE);
-	DMAMUX_EnableChannel(DMAMUX0, DMA_CHANNEL);
-
-	DMA_Init(DMA0);
-	DMA_CreateHandle(&g_DMA_Handle, DMA0, DMA_CHANNEL);
+	DMA_CreateHandle(&g_DMA_Handle, DMA0, DMA_CHANNEL_2);
 	DMA_SetCallback(&g_DMA_Handle, DMA_Callback, NULL);
 
-	DMA_SetTransferConfig(DMA0, 0, &transferConfig);
-	DMA_EnableChannelRequest(DMA0, 0);
-	DMA_EnableInterrupts(DMA0, 0);
+	DMA_SetTransferConfig(DMA0, DMA_CHANNEL_2, &transferConfig);
+	DMA_EnableChannelRequest(DMA0, DMA_CHANNEL_2);
+	DMA_EnableCycleSteal(DMA0, DMA_CHANNEL_2, true);
+	DMA_EnableInterrupts(DMA0, DMA_CHANNEL_2);
 
 
 

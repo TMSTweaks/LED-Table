@@ -45,6 +45,8 @@ PinsProfile:
 
 #define PIN1_IDX                         1u   /*!< Pin number for pin 1 in a port */
 #define PIN2_IDX                         2u   /*!< Pin number for pin 2 in a port */
+#define PIN19_IDX						19u
+#define PIN18_IDX						18u
 #define SOPT5_UART0RXSRC_UART_RX      0x00u   /*!< UART0 receive data source select: UART0_RX pin */
 #define SOPT5_UART0TXSRC_UART_TX      0x00u   /*!< UART0 transmit data source select: UART0_TX pin */
 
@@ -77,9 +79,14 @@ void BOARD_InitBootPins(void) {
  *END**************************************************************************/
 void BOARD_InitPins(void) {
   CLOCK_EnableClock(kCLOCK_PortA);                           /* Port A Clock Gate Control: Clock enabled */
+  CLOCK_EnableClock(kCLOCK_PortB);
+  CLOCK_EnableClock(kCLOCK_PortD);
 
   PORT_SetPinMux(PORTA, PIN1_IDX, kPORT_MuxAsGpio);            /* PORTA1 (pin 27) is configured as UART0_RX */
   PORT_SetPinMux(PORTA, PIN2_IDX, kPORT_MuxAsGpio);
+  PORT_SetPinMux(PORTB, PIN19_IDX, kPORT_MuxAsGpio);
+  PORT_SetPinMux(PORTB, PIN18_IDX, kPORT_MuxAsGpio);
+  PORT_SetPinMux(PORTD, PIN1_IDX, kPORT_MuxAsGpio);
 
 }
 

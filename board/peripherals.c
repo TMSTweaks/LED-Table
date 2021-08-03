@@ -42,6 +42,7 @@ product: Peripherals v1.0
 
 #include "peripherals.h"
 #include "fsl_gpio.h"
+#include "board.h"
 
 
 
@@ -57,7 +58,21 @@ void BOARD_InitGPIO(void) {
 			1
 	};
 
+	gpio_pin_config_t pinBConfig = {
+			kGPIO_DigitalOutput,
+			1
+	};
+
+	gpio_pin_config_t pinDConfig = {
+				kGPIO_DigitalOutput,
+				1
+	};
+
 	GPIO_PinInit(GPIOA, 1, &pinAConfig);
+	GPIO_PinInit(BOARD_LED_GREEN_GPIO, 19U, &pinBConfig);
+	GPIO_PinInit(BOARD_LED_GREEN_GPIO, 18U, &pinBConfig);
+	GPIO_PinInit(GPIOD, 1, &pinDConfig);
+
 
 }
 
