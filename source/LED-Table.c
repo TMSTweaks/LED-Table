@@ -51,12 +51,19 @@
 #define TPM2_C0_OF 34
 #define TPM2_C1_OF 35
 
+#define NUM_BITS_PIXEL 24 //each pixel has 24 bits for GRB (8:8:8)
+#define NUM_LEDS 1
+
 
 dma_handle_t g_DMA_Handle;
 volatile bool g_DMA_Transfer_Complete;
-static const uint32_t resetValue = (1<<19);
-static const uint32_t resetDValue = (1<<1);
-static const uint32_t reset18Value = (1<<18);
+static const uint32_t resetValue = (1<<1);
+static const uint32_t resetBValue = (1<<19);
+static const uint32_t resetGValue = (1<<18);
+
+
+
+static uint32_t transmitBuffer[NUM_BITS_PIXEL*NUM_LEDS];
 
 void DMA_Callback(dma_handle_t *handle, void *param)
 {
@@ -99,10 +106,6 @@ void BOARD_InitTPM(void) {
 	TPM_EnableInterrupts(TPM2, kTPM_Chnl0InterruptEnable | kTPM_Chnl1InterruptEnable | kTPM_TimeOverflowInterruptEnable);
 
 
-	TPM2->CONTROLS[0].CnSC |= 1UL << 0; //Enable DMA requests for Channel 0
-	TPM2->CONTROLS[1].CnSC |= 1UL << 0; //Enable DMA requests for Channel 1
-	TPM2->SC |= TPM_SC_DMA_MASK;
-
 
 }
 
@@ -117,8 +120,8 @@ void BOARD_InitDMA(void) {
 	/* Setup DMA Channel 0 */
 	dma_transfer_config_t transferConfig0;
 	memset(&transferConfig0, 0, sizeof(transferConfig0));
-	transferConfig0.srcAddr = (uint32_t)&resetDValue;
-	transferConfig0.destAddr = (uint32_t)&GPIOD->PCOR;
+	transferConfig0.srcAddr = (uint32_t)&resetBValue;
+	transferConfig0.destAddr = (uint32_t)&GPIOB->PCOR;
 	transferConfig0.enableSrcIncrement = false;
 	transferConfig0.enableDestIncrement = false;
 	transferConfig0.srcSize = kDMA_Transfersize32bits;
@@ -126,36 +129,30 @@ void BOARD_InitDMA(void) {
 	transferConfig0.transferSize = sizeof(resetValue);
 
 	DMAMUX_SetSource(DMAMUX0, DMA_CHANNEL_0, TPM2_C0_OF);
-	DMAMUX_EnableChannel(DMAMUX0, DMA_CHANNEL_0);
 
 	DMA_SetTransferConfig(DMA0, DMA_CHANNEL_0, &transferConfig0);
-	DMA_EnableChannelRequest(DMA0, DMA_CHANNEL_0);
-	DMA_EnableCycleSteal(DMA0, DMA_CHANNEL_0, true);
 
 	/* Setup DMA Channel 1 */
 	dma_transfer_config_t transferConfig1;
 	memset(&transferConfig1, 0, sizeof(transferConfig1));
-	transferConfig1.srcAddr = (uint32_t)&reset18Value;
+	transferConfig1.srcAddr = (uint32_t)&resetGValue;
 	transferConfig1.destAddr = (uint32_t)&GPIOB->PCOR;
-	transferConfig1.enableSrcIncrement = false;
+	transferConfig1.enableSrcIncrement = true;
 	transferConfig1.enableDestIncrement = false;
 	transferConfig1.srcSize = kDMA_Transfersize32bits;
 	transferConfig1.destSize = kDMA_Transfersize32bits;
 	transferConfig1.transferSize = sizeof(resetValue);
 
 	DMAMUX_SetSource(DMAMUX0, DMA_CHANNEL_1, TPM2_C1_OF);
-	DMAMUX_EnableChannel(DMAMUX0, DMA_CHANNEL_1);
 
 	DMA_SetTransferConfig(DMA0, DMA_CHANNEL_1, &transferConfig1);
-	DMA_EnableChannelRequest(DMA0, DMA_CHANNEL_1);
-	DMA_EnableCycleSteal(DMA0, DMA_CHANNEL_1, true);
 
 
 	/* Setup DMA Channel 2 */
 	dma_transfer_config_t transferConfig;
 	memset(&transferConfig, 0, sizeof(transferConfig));
 	transferConfig.srcAddr = (uint32_t)&resetValue;
-	transferConfig.destAddr = (uint32_t)&GPIOB->PCOR;
+	transferConfig.destAddr = (uint32_t)&GPIOD->PCOR;
 	transferConfig.enableSrcIncrement = false;
 	transferConfig.enableDestIncrement = false;
 	transferConfig.srcSize = kDMA_Transfersize32bits;
@@ -163,27 +160,101 @@ void BOARD_InitDMA(void) {
 	transferConfig.transferSize = sizeof(resetValue);
 
 	DMAMUX_SetSource(DMAMUX0, DMA_CHANNEL_2, TPM2_OF);
-	DMAMUX_EnableChannel(DMAMUX0, DMA_CHANNEL_2);
 
 	DMA_CreateHandle(&g_DMA_Handle, DMA0, DMA_CHANNEL_2);
 	DMA_SetCallback(&g_DMA_Handle, DMA_Callback, NULL);
 
 	DMA_SetTransferConfig(DMA0, DMA_CHANNEL_2, &transferConfig);
-	DMA_EnableChannelRequest(DMA0, DMA_CHANNEL_2);
-	DMA_EnableCycleSteal(DMA0, DMA_CHANNEL_2, true);
 	DMA_EnableInterrupts(DMA0, DMA_CHANNEL_2);
 
+}
 
+void Transfer(uint32_t address, size_t numOfBytes) {
 
+	uint32_t channelZeroDone, channelOneDone, channelTwoDone;
+
+	//Clear DMA Channel Done Flag
+	DMA_ClearChannelStatusFlags(DMA0, DMA_CHANNEL_0, kDMA_TransactionsDoneFlag);
+	DMA_ClearChannelStatusFlags(DMA0, DMA_CHANNEL_1, kDMA_TransactionsDoneFlag);
+	DMA_ClearChannelStatusFlags(DMA0, DMA_CHANNEL_2, kDMA_TransactionsDoneFlag);
+
+	//Set the Source Address for Channel 1
+	DMA_SetSourceAddress(DMA0, DMA_CHANNEL_1, address);
+
+	//Set the Byte Count for Each Channel
+	DMA_SetTransferSize(DMA0, DMA_CHANNEL_0, numOfBytes);
+	DMA_SetTransferSize(DMA0, DMA_CHANNEL_1, numOfBytes);
+	DMA_SetTransferSize(DMA0, DMA_CHANNEL_2, numOfBytes);
+
+	//Reset TPM Timer
+	BOARD_InitTPM();
+	TPM_ClearStatusFlags(TPM2, kTPM_Chnl0Flag | kTPM_Chnl1Flag | kTPM_TimeOverflowFlag);
+
+	//Re-Mux DMA Channels (disabled at end of transfer)
+	DMAMUX_EnableChannel(DMAMUX0, DMA_CHANNEL_0);
+	DMAMUX_EnableChannel(DMAMUX0, DMA_CHANNEL_1);
+	DMAMUX_EnableChannel(DMAMUX0, DMA_CHANNEL_2);
+
+	//Enable DMA Peripheral Requests
+	DMA_EnableChannelRequest(DMA0, DMA_CHANNEL_0);
+	DMA_EnableChannelRequest(DMA0, DMA_CHANNEL_1);
+	DMA_EnableChannelRequest(DMA0, DMA_CHANNEL_2);
+
+	//Enable TPM DMA
+	TPM2->CONTROLS[0].CnSC |= 1UL << 0; //Enable DMA requests for Channel 0
+	TPM2->CONTROLS[1].CnSC |= 1UL << 0; //Enable DMA requests for Channel 1
+	TPM2->SC |= TPM_SC_DMA_MASK;
+
+	StartTimer();
+	g_DMA_Transfer_Complete = false;
+
+	for(;;) {
+		channelZeroDone = DMA_GetChannelStatusFlags(DMA0, DMA_CHANNEL_0);
+		channelOneDone = DMA_GetChannelStatusFlags(DMA0, DMA_CHANNEL_1);
+		channelTwoDone = DMA_GetChannelStatusFlags(DMA0, DMA_CHANNEL_2);
+
+		if (channelZeroDone && channelOneDone && channelTwoDone) {
+			break;
+		}
+	}
+
+	//Un-Mux DMA Channels
+	DMAMUX_DisableChannel(DMAMUX0, DMA_CHANNEL_0);
+	DMAMUX_DisableChannel(DMAMUX0, DMA_CHANNEL_1);
+	DMAMUX_DisableChannel(DMAMUX0, DMA_CHANNEL_2);
+
+	//Disable TPM DMA
+	TPM2->CONTROLS[0].CnSC |= 0UL << 0; //Disable DMA requests for Channel 0
+	TPM2->CONTROLS[1].CnSC |= 0UL << 0; //Disable DMA requests for Channel 1
+	TPM2->SC |= TPM_SC_DMA_MASK;
+
+	StopTimer();
+
+}
+
+void Test(void) {
+
+	int i;
+	for (i = 0;i<24;i++) {
+		transmitBuffer[i] = (1<<1);
+	}
+
+	Transfer((uint32_t)&transmitBuffer[0], sizeof(transmitBuffer));
 
 }
 
 void InitLED(void) {
 	BOARD_InitTPM();
 	BOARD_InitDMA();
+	Test();
+}
 
+void StartTimer(void) {
 	TPM_StartTimer(TPM2, kTPM_SystemClock);
+}
 
+void StopTimer(void) {
+	TPM_StopTimer(TPM2);
 }
 
 

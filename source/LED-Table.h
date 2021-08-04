@@ -15,6 +15,9 @@ typedef uint32_t LEDBitsT;
 void InitLED(void);
 void BOARD_InitTPM(void);
 void BOARD_InitDMA(void);
+void StartTimer(void);
+void StopTimer(void);
+void Transfer(uint32_t address, size_t numOfBytes);
 
 #endif
 
