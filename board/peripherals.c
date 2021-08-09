@@ -55,7 +55,7 @@ void BOARD_InitGPIO(void) {
 
 	gpio_pin_config_t pinAConfig = {
 			kGPIO_DigitalOutput,
-			1
+			0
 	};
 
 	gpio_pin_config_t pinBConfig = {

@@ -52,24 +52,26 @@
 #define TPM2_C1_OF 35
 
 #define NUM_BITS_PIXEL 24 //each pixel has 24 bits for GRB (8:8:8)
-#define NUM_LEDS 1
+#define NUM_LEDS 3
 
-
-dma_handle_t g_DMA_Handle;
-volatile bool g_DMA_Transfer_Complete;
+//dma_handle_t g_DMA_Handle;
+//volatile bool g_DMA_Transfer_Complete;
 static const uint32_t resetValue = (1<<1);
-static const uint32_t resetBValue = (1<<19);
-static const uint32_t resetGValue = (1<<18);
+//static const uint32_t resetBValue = (1<<19);
+//static const uint32_t resetGValue = (1<<18);
 
 
 
 static uint32_t transmitBuffer[NUM_BITS_PIXEL*NUM_LEDS];
+//static uint32_t receiveBuffer[NUM_BITS_PIXEL*NUM_LEDS];
 
-void DMA_Callback(dma_handle_t *handle, void *param)
+
+
+/*void DMA_Callback(dma_handle_t *handle, void *param)
 {
     g_DMA_Transfer_Complete = true;
 
-}
+}*/
 
 /*
  * @brief   Application entry point.
@@ -90,19 +92,19 @@ void BOARD_InitTPM(void) {
 			{
 					.chnlNumber = 0,
 					.level = kTPM_NoPwmSignal,
-					.dutyCyclePercent = 18U
+					.dutyCyclePercent = 72U
 			},
 			{
 					.chnlNumber = 1,
 					.level = kTPM_NoPwmSignal,
-					.dutyCyclePercent = 37U
+					.dutyCyclePercent = 28U
 			}
 	};
 
 	CLOCK_SetTpmClock(1U);
 
 	TPM_Init(TPM2, &tpmInfo);
-	TPM_SetupPwm(TPM2, tpmParam, 2U, kTPM_EdgeAlignedPwm, 5000U, TPM_SOURCE_CLOCK);
+	TPM_SetupPwm(TPM2, tpmParam, 2U, kTPM_EdgeAlignedPwm, 820000U, TPM_SOURCE_CLOCK);
 	TPM_EnableInterrupts(TPM2, kTPM_Chnl0InterruptEnable | kTPM_Chnl1InterruptEnable | kTPM_TimeOverflowInterruptEnable);
 
 
@@ -111,7 +113,7 @@ void BOARD_InitTPM(void) {
 
 void BOARD_InitDMA(void) {
 
-	g_DMA_Transfer_Complete = false;
+	//g_DMA_Transfer_Complete = false;
 
 	DMAMUX_Init(DMAMUX0);
 	DMA_Init(DMA0);
@@ -120,23 +122,25 @@ void BOARD_InitDMA(void) {
 	/* Setup DMA Channel 0 */
 	dma_transfer_config_t transferConfig0;
 	memset(&transferConfig0, 0, sizeof(transferConfig0));
-	transferConfig0.srcAddr = (uint32_t)&resetBValue;
-	transferConfig0.destAddr = (uint32_t)&GPIOB->PCOR;
+	transferConfig0.srcAddr = (uint32_t)&resetValue;
+	transferConfig0.destAddr = (uint32_t)&GPIOA->PSOR;
 	transferConfig0.enableSrcIncrement = false;
 	transferConfig0.enableDestIncrement = false;
 	transferConfig0.srcSize = kDMA_Transfersize32bits;
 	transferConfig0.destSize = kDMA_Transfersize32bits;
 	transferConfig0.transferSize = sizeof(resetValue);
 
+
 	DMAMUX_SetSource(DMAMUX0, DMA_CHANNEL_0, TPM2_C0_OF);
 
 	DMA_SetTransferConfig(DMA0, DMA_CHANNEL_0, &transferConfig0);
+	DMA_EnableCycleSteal(DMA0, DMA_CHANNEL_0, true);
 
 	/* Setup DMA Channel 1 */
 	dma_transfer_config_t transferConfig1;
 	memset(&transferConfig1, 0, sizeof(transferConfig1));
-	transferConfig1.srcAddr = (uint32_t)&resetGValue;
-	transferConfig1.destAddr = (uint32_t)&GPIOB->PCOR;
+	transferConfig1.srcAddr = (uint32_t)&resetValue;
+	transferConfig1.destAddr = (uint32_t)&GPIOA->PDOR;
 	transferConfig1.enableSrcIncrement = true;
 	transferConfig1.enableDestIncrement = false;
 	transferConfig1.srcSize = kDMA_Transfersize32bits;
@@ -146,13 +150,14 @@ void BOARD_InitDMA(void) {
 	DMAMUX_SetSource(DMAMUX0, DMA_CHANNEL_1, TPM2_C1_OF);
 
 	DMA_SetTransferConfig(DMA0, DMA_CHANNEL_1, &transferConfig1);
+	DMA_EnableCycleSteal(DMA0, DMA_CHANNEL_1, true);
 
 
 	/* Setup DMA Channel 2 */
 	dma_transfer_config_t transferConfig;
 	memset(&transferConfig, 0, sizeof(transferConfig));
 	transferConfig.srcAddr = (uint32_t)&resetValue;
-	transferConfig.destAddr = (uint32_t)&GPIOD->PCOR;
+	transferConfig.destAddr = (uint32_t)&GPIOA->PCOR;
 	transferConfig.enableSrcIncrement = false;
 	transferConfig.enableDestIncrement = false;
 	transferConfig.srcSize = kDMA_Transfersize32bits;
@@ -161,11 +166,12 @@ void BOARD_InitDMA(void) {
 
 	DMAMUX_SetSource(DMAMUX0, DMA_CHANNEL_2, TPM2_OF);
 
-	DMA_CreateHandle(&g_DMA_Handle, DMA0, DMA_CHANNEL_2);
-	DMA_SetCallback(&g_DMA_Handle, DMA_Callback, NULL);
+	//DMA_CreateHandle(&g_DMA_Handle, DMA0, DMA_CHANNEL_2);
+	//DMA_SetCallback(&g_DMA_Handle, DMA_Callback, NULL);
 
 	DMA_SetTransferConfig(DMA0, DMA_CHANNEL_2, &transferConfig);
-	DMA_EnableInterrupts(DMA0, DMA_CHANNEL_2);
+	//DMA_EnableInterrupts(DMA0, DMA_CHANNEL_2);
+	DMA_EnableCycleSteal(DMA0, DMA_CHANNEL_2, true);
 
 }
 
@@ -206,14 +212,13 @@ void Transfer(uint32_t address, size_t numOfBytes) {
 	TPM2->SC |= TPM_SC_DMA_MASK;
 
 	StartTimer();
-	g_DMA_Transfer_Complete = false;
+	//g_DMA_Transfer_Complete = false;
 
 	for(;;) {
 		channelZeroDone = DMA_GetChannelStatusFlags(DMA0, DMA_CHANNEL_0);
 		channelOneDone = DMA_GetChannelStatusFlags(DMA0, DMA_CHANNEL_1);
 		channelTwoDone = DMA_GetChannelStatusFlags(DMA0, DMA_CHANNEL_2);
-
-		if (channelZeroDone && channelOneDone && channelTwoDone) {
+		if (channelZeroDone == kDMA_TransactionsDoneFlag && channelOneDone == kDMA_TransactionsDoneFlag && channelTwoDone == kDMA_TransactionsDoneFlag) {
 			break;
 		}
 	}
@@ -235,12 +240,37 @@ void Transfer(uint32_t address, size_t numOfBytes) {
 void Test(void) {
 
 	int i;
-	for (i = 0;i<24;i++) {
+
+	//Red First LED
+	for (i = 0;i<8;i++) {
+		transmitBuffer[i] = (0<<1);
+	}
+	for (i = 8;i<16;i++) {
 		transmitBuffer[i] = (1<<1);
 	}
+	for (i = 16; i<24; i++) {
+		transmitBuffer[i] = (0<<1);
+	}
+
+
+	//Green Second LED
+	for (i = 24; i<32; i++) {
+		transmitBuffer[i] = (1<<1);
+	}
+	for (i = 32; i<48; i++) {
+		transmitBuffer[i] = (0<<1);
+	}
+
+	//Blue Third LED
+	for (i = 48; i<64; i++) {
+		transmitBuffer[i] = (0<<1);
+	}
+	for (i = 64; i<72; i++) {
+		transmitBuffer[i]  = (1<<1);
+	}
+
 
 	Transfer((uint32_t)&transmitBuffer[0], sizeof(transmitBuffer));
-
 }
 
 void InitLED(void) {
