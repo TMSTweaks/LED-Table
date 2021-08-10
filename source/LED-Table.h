@@ -18,6 +18,8 @@ void BOARD_InitDMA(void);
 void StartTimer(void);
 void StopTimer(void);
 void Transfer(uint32_t address, size_t numOfBytes);
+void ClearLEDs(void);
+void SetLEDs(int rVAL, int gVAL, int bVAL);
 
 #endif
 

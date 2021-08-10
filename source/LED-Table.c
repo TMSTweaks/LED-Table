@@ -54,24 +54,14 @@
 #define NUM_BITS_PIXEL 24 //each pixel has 24 bits for GRB (8:8:8)
 #define NUM_LEDS 3
 
-//dma_handle_t g_DMA_Handle;
-//volatile bool g_DMA_Transfer_Complete;
+
 static const uint32_t resetValue = (1<<1);
-//static const uint32_t resetBValue = (1<<19);
-//static const uint32_t resetGValue = (1<<18);
+
 
 
 
 static uint32_t transmitBuffer[NUM_BITS_PIXEL*NUM_LEDS];
-//static uint32_t receiveBuffer[NUM_BITS_PIXEL*NUM_LEDS];
 
-
-
-/*void DMA_Callback(dma_handle_t *handle, void *param)
-{
-    g_DMA_Transfer_Complete = true;
-
-}*/
 
 /*
  * @brief   Application entry point.
@@ -107,6 +97,10 @@ void BOARD_InitTPM(void) {
 	TPM_SetupPwm(TPM2, tpmParam, 2U, kTPM_EdgeAlignedPwm, 820000U, TPM_SOURCE_CLOCK);
 	TPM_EnableInterrupts(TPM2, kTPM_Chnl0InterruptEnable | kTPM_Chnl1InterruptEnable | kTPM_TimeOverflowInterruptEnable);
 
+	TPM2->CONTROLS[0].CnV = 18;
+	TPM2->CONTROLS[1].CnV = 36;
+
+	TPM2->MOD = 60;
 
 
 }
@@ -166,11 +160,7 @@ void BOARD_InitDMA(void) {
 
 	DMAMUX_SetSource(DMAMUX0, DMA_CHANNEL_2, TPM2_OF);
 
-	//DMA_CreateHandle(&g_DMA_Handle, DMA0, DMA_CHANNEL_2);
-	//DMA_SetCallback(&g_DMA_Handle, DMA_Callback, NULL);
-
 	DMA_SetTransferConfig(DMA0, DMA_CHANNEL_2, &transferConfig);
-	//DMA_EnableInterrupts(DMA0, DMA_CHANNEL_2);
 	DMA_EnableCycleSteal(DMA0, DMA_CHANNEL_2, true);
 
 }
@@ -179,10 +169,13 @@ void Transfer(uint32_t address, size_t numOfBytes) {
 
 	uint32_t channelZeroDone, channelOneDone, channelTwoDone;
 
+	BOARD_InitDMA();
+
 	//Clear DMA Channel Done Flag
 	DMA_ClearChannelStatusFlags(DMA0, DMA_CHANNEL_0, kDMA_TransactionsDoneFlag);
 	DMA_ClearChannelStatusFlags(DMA0, DMA_CHANNEL_1, kDMA_TransactionsDoneFlag);
 	DMA_ClearChannelStatusFlags(DMA0, DMA_CHANNEL_2, kDMA_TransactionsDoneFlag);
+
 
 	//Set the Source Address for Channel 1
 	DMA_SetSourceAddress(DMA0, DMA_CHANNEL_1, address);
@@ -195,6 +188,7 @@ void Transfer(uint32_t address, size_t numOfBytes) {
 	//Reset TPM Timer
 	BOARD_InitTPM();
 	TPM_ClearStatusFlags(TPM2, kTPM_Chnl0Flag | kTPM_Chnl1Flag | kTPM_TimeOverflowFlag);
+
 
 	//Re-Mux DMA Channels (disabled at end of transfer)
 	DMAMUX_EnableChannel(DMAMUX0, DMA_CHANNEL_0);
@@ -223,10 +217,13 @@ void Transfer(uint32_t address, size_t numOfBytes) {
 		}
 	}
 
+
 	//Un-Mux DMA Channels
 	DMAMUX_DisableChannel(DMAMUX0, DMA_CHANNEL_0);
 	DMAMUX_DisableChannel(DMAMUX0, DMA_CHANNEL_1);
 	DMAMUX_DisableChannel(DMAMUX0, DMA_CHANNEL_2);
+
+	DMA_Deinit(DMA0);
 
 	//Disable TPM DMA
 	TPM2->CONTROLS[0].CnSC |= 0UL << 0; //Disable DMA requests for Channel 0
@@ -235,13 +232,90 @@ void Transfer(uint32_t address, size_t numOfBytes) {
 
 	StopTimer();
 
+	//Wait at least 50 microseconds
+	int i;
+	for (i = 0; i < 10; i++) {
+		//Do nothing
+	}
+}
+
+void ClearLEDs(void) {
+	int i;
+	for (i = 0; i<NUM_BITS_PIXEL*NUM_LEDS; i++) {
+		transmitBuffer[i] = (0<<1);
+	}
+	Transfer((uint32_t)&transmitBuffer[0], sizeof(transmitBuffer));
+}
+
+void SetLEDs(int rVAL, int gVAL, int bVAL) {
+
+	int i, n, t;
+
+	int r[8];
+	int g[8];
+	int b[8];
+
+	//Convert rgb values to binary
+	for (i = 0; i < 8; i++) {
+		if (rVAL > 0) {
+			r[i] = rVAL%2;
+			rVAL = rVAL/2;
+		}
+		else {
+			r[i] = 0;
+		}
+	}
+
+	for (i = 0; i < 8; i++) {
+		if (gVAL > 0) {
+			g[i] = gVAL%2;
+			gVAL = gVAL/2;
+		}
+		else {
+			g[i] = 0;
+		}
+	}
+
+	for (i = 0; i < 8; i++) {
+		if (bVAL > 0) {
+			b[i] = bVAL%2;
+			bVAL = bVAL/2;
+		}
+		else {
+			b[i] = 0;
+		}
+	}
+
+	//Move the bits into the transmitBuffer
+	for (i = 0; i < NUM_LEDS; i++) {
+		t = 0;
+		for (n = 0 + (i*NUM_BITS_PIXEL); n < 8 + (i*NUM_BITS_PIXEL); n++) {
+			transmitBuffer[n] = (g[t] << 1);
+			t++;
+		}
+		t = 0;
+		for (n = 8 + (i*NUM_BITS_PIXEL); n < 16 + (i*NUM_BITS_PIXEL); n++) {
+			transmitBuffer[n] = (r[t] << 1);
+			t++;
+		}
+		t = 0;
+		for (n = 16 + (i*NUM_BITS_PIXEL); n < 24 + (i*NUM_BITS_PIXEL); n++) {
+			transmitBuffer[n] = (b[t] << 1);
+			t++;
+		}
+	}
+
+
+	Transfer((uint32_t)&transmitBuffer[0], sizeof(transmitBuffer));
+
+
 }
 
 void Test(void) {
 
 	int i;
 
-	//Red First LED
+	//Purple First LED
 	for (i = 0;i<8;i++) {
 		transmitBuffer[i] = (0<<1);
 	}
@@ -249,7 +323,7 @@ void Test(void) {
 		transmitBuffer[i] = (1<<1);
 	}
 	for (i = 16; i<24; i++) {
-		transmitBuffer[i] = (0<<1);
+		transmitBuffer[i] = (1<<1);
 	}
 
 
@@ -276,7 +350,8 @@ void Test(void) {
 void InitLED(void) {
 	BOARD_InitTPM();
 	BOARD_InitDMA();
-	Test();
+	ClearLEDs();
+	SetLEDs(255, 0, 146);
 }
 
 void StartTimer(void) {
