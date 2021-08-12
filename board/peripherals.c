@@ -42,6 +42,7 @@ product: Peripherals v1.0
 
 #include "peripherals.h"
 #include "fsl_gpio.h"
+#include "fsl_port.h"
 #include "board.h"
 
 
@@ -52,11 +53,21 @@ product: Peripherals v1.0
  */
 
 void BOARD_InitGPIO(void) {
-
-	gpio_pin_config_t pinAConfig = {
+	//GPIO Config for Pin A1
+	gpio_pin_config_t pinA1Config = {
 			kGPIO_DigitalOutput,
 			0
 	};
+
+	//GPIO Config for Pin A2
+	PORT_SetPinInterruptConfig(PORTA, 2,
+	      kPORT_InterruptLogicZero);
+	NVIC_EnableIRQ(PORTA_IRQn);
+	gpio_pin_config_t pinA2Config = {
+			kGPIO_DigitalInput,
+			0
+	};
+
 
 	gpio_pin_config_t pinBConfig = {
 			kGPIO_DigitalOutput,
@@ -68,7 +79,8 @@ void BOARD_InitGPIO(void) {
 				1
 	};
 
-	GPIO_PinInit(GPIOA, 1, &pinAConfig);
+	GPIO_PinInit(GPIOA, 1, &pinA1Config);
+	GPIO_PinInit(GPIOA, 2, &pinA2Config);
 	GPIO_PinInit(BOARD_LED_GREEN_GPIO, 19U, &pinBConfig);
 	GPIO_PinInit(BOARD_LED_GREEN_GPIO, 18U, &pinBConfig);
 	GPIO_PinInit(GPIOD, 1, &pinDConfig);

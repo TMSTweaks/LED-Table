@@ -35,6 +35,7 @@
 #include <stdio.h>
 #include "board.h"
 #include "peripherals.h"
+#include "fsl_port.h"
 #include "pin_mux.h"
 #include "clock_config.h"
 #include "MKL25Z4.h"
@@ -163,9 +164,15 @@ void BOARD_InitDMA(void) {
 	DMA_SetTransferConfig(DMA0, DMA_CHANNEL_2, &transferConfig);
 	DMA_EnableCycleSteal(DMA0, DMA_CHANNEL_2, true);
 
+	DMA_EnableChannelRequest(DMA0, DMA_CHANNEL_0);
+	DMA_EnableChannelRequest(DMA0, DMA_CHANNEL_1);
+	DMA_EnableChannelRequest(DMA0, DMA_CHANNEL_2);
+
 }
 
 void Transfer(uint32_t address, size_t numOfBytes) {
+
+	NVIC_DisableIRQ(PORTA_IRQn); //disable interrupts at start of transfer
 
 	uint32_t channelZeroDone, channelOneDone, channelTwoDone;
 
@@ -195,10 +202,6 @@ void Transfer(uint32_t address, size_t numOfBytes) {
 	DMAMUX_EnableChannel(DMAMUX0, DMA_CHANNEL_1);
 	DMAMUX_EnableChannel(DMAMUX0, DMA_CHANNEL_2);
 
-	//Enable DMA Peripheral Requests
-	DMA_EnableChannelRequest(DMA0, DMA_CHANNEL_0);
-	DMA_EnableChannelRequest(DMA0, DMA_CHANNEL_1);
-	DMA_EnableChannelRequest(DMA0, DMA_CHANNEL_2);
 
 	//Enable TPM DMA
 	TPM2->CONTROLS[0].CnSC |= 1UL << 0; //Enable DMA requests for Channel 0
@@ -206,7 +209,6 @@ void Transfer(uint32_t address, size_t numOfBytes) {
 	TPM2->SC |= TPM_SC_DMA_MASK;
 
 	StartTimer();
-	//g_DMA_Transfer_Complete = false;
 
 	for(;;) {
 		channelZeroDone = DMA_GetChannelStatusFlags(DMA0, DMA_CHANNEL_0);
@@ -223,7 +225,7 @@ void Transfer(uint32_t address, size_t numOfBytes) {
 	DMAMUX_DisableChannel(DMAMUX0, DMA_CHANNEL_1);
 	DMAMUX_DisableChannel(DMAMUX0, DMA_CHANNEL_2);
 
-	DMA_Deinit(DMA0);
+	//DMA_Deinit(DMA0);
 
 	//Disable TPM DMA
 	TPM2->CONTROLS[0].CnSC |= 0UL << 0; //Disable DMA requests for Channel 0
@@ -237,6 +239,9 @@ void Transfer(uint32_t address, size_t numOfBytes) {
 	for (i = 0; i < 10; i++) {
 		//Do nothing
 	}
+
+	NVIC_EnableIRQ(PORTA_IRQn); //Re-enable interrupts
+
 }
 
 void ClearLEDs(void) {
@@ -244,10 +249,25 @@ void ClearLEDs(void) {
 	for (i = 0; i<NUM_BITS_PIXEL*NUM_LEDS; i++) {
 		transmitBuffer[i] = (0<<1);
 	}
-	Transfer((uint32_t)&transmitBuffer[0], sizeof(transmitBuffer));
 }
 
 void SetLEDs(int rVAL, int gVAL, int bVAL) {
+
+	NVIC_DisableIRQ(PORTA_IRQn);
+
+	int i;
+
+	//Move the bits into the transmitBuffer
+	for (i = 0; i < NUM_LEDS; i++) {
+		SetLED(i, rVAL, gVAL, bVAL);
+	}
+
+	NVIC_EnableIRQ(PORTA_IRQn);
+}
+
+void SetLED(int led, int rVAL, int gVAL, int bVAL) {
+
+	NVIC_DisableIRQ(PORTA_IRQn);
 
 	int i, n, t;
 
@@ -286,72 +306,48 @@ void SetLEDs(int rVAL, int gVAL, int bVAL) {
 		}
 	}
 
-	//Move the bits into the transmitBuffer
-	for (i = 0; i < NUM_LEDS; i++) {
-		t = 0;
-		for (n = 0 + (i*NUM_BITS_PIXEL); n < 8 + (i*NUM_BITS_PIXEL); n++) {
-			transmitBuffer[n] = (g[t] << 1);
-			t++;
-		}
-		t = 0;
-		for (n = 8 + (i*NUM_BITS_PIXEL); n < 16 + (i*NUM_BITS_PIXEL); n++) {
-			transmitBuffer[n] = (r[t] << 1);
-			t++;
-		}
-		t = 0;
-		for (n = 16 + (i*NUM_BITS_PIXEL); n < 24 + (i*NUM_BITS_PIXEL); n++) {
-			transmitBuffer[n] = (b[t] << 1);
-			t++;
-		}
+	//Move bits into transmitBuffer
+	t = 0;
+	for (n = 0 + (led*NUM_BITS_PIXEL); n < 8 + (led*NUM_BITS_PIXEL); n++) {
+		transmitBuffer[n] = (g[t] << 1);
+		t++;
+	}
+	t = 0;
+	for (n = 8 + (led*NUM_BITS_PIXEL); n < 16 + (led*NUM_BITS_PIXEL); n++) {
+		transmitBuffer[n] = (r[t] << 1);
+		t++;
+	}
+	t = 0;
+	for (n = 16 + (led*NUM_BITS_PIXEL); n < 24 + (led*NUM_BITS_PIXEL); n++) {
+		transmitBuffer[n] = (b[t] << 1);
+		t++;
 	}
 
+	NVIC_EnableIRQ(PORTA_IRQn);
+
+}
+void PORTA_IRQHandler(void) {
+	if (~(GPIOA->PDIR & (1<<2))) {
+		SetLED(1, 0, 0, 255);
+		PushLEDs();
+	}
+	PORT_ClearPinsInterruptFlags(PORTA, true);
+	PORTA->PCR[2] |= (1<<24);
+}
+
+void PushLEDs(void) {
 
 	Transfer((uint32_t)&transmitBuffer[0], sizeof(transmitBuffer));
 
-
 }
 
-void Test(void) {
-
-	int i;
-
-	//Purple First LED
-	for (i = 0;i<8;i++) {
-		transmitBuffer[i] = (0<<1);
-	}
-	for (i = 8;i<16;i++) {
-		transmitBuffer[i] = (1<<1);
-	}
-	for (i = 16; i<24; i++) {
-		transmitBuffer[i] = (1<<1);
-	}
-
-
-	//Green Second LED
-	for (i = 24; i<32; i++) {
-		transmitBuffer[i] = (1<<1);
-	}
-	for (i = 32; i<48; i++) {
-		transmitBuffer[i] = (0<<1);
-	}
-
-	//Blue Third LED
-	for (i = 48; i<64; i++) {
-		transmitBuffer[i] = (0<<1);
-	}
-	for (i = 64; i<72; i++) {
-		transmitBuffer[i]  = (1<<1);
-	}
-
-
-	Transfer((uint32_t)&transmitBuffer[0], sizeof(transmitBuffer));
-}
 
 void InitLED(void) {
 	BOARD_InitTPM();
 	BOARD_InitDMA();
 	ClearLEDs();
-	SetLEDs(255, 0, 146);
+	SetLED(0, 255, 0, 0);
+	PushLEDs();
 }
 
 void StartTimer(void) {
@@ -375,5 +371,8 @@ int main(void) {
 #endif
 
     InitLED();
-    while(1);
+    while(1) {
+    	SetLEDs(0, 255, 200);
+    	PushLEDs();
+    }
 }
