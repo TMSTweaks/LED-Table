@@ -19,9 +19,15 @@ void StartTimer(void);
 void StopTimer(void);
 void Transfer(uint32_t address, size_t numOfBytes);
 void ClearLEDs(void);
-void SetLEDs(int rVAL, int gVAL, int bVAL);
-void SetLED(int led, int rVAL, int gVAL, int bVAL);
+void SetLEDs(bool primary);
+void SetLED(int led, bool primary);
 void PushLEDs(void);
+void InitSensors(void);
+void EnableInterrupts(void);
+void DisableInterrupts(void);
+void Wait(int i);
+void SetPrimaryColor(int rVAL, int gVAL, int bVAL);
+void SetSecondaryColor(int rVAL, int gVAL, int bVAL);
 
 #endif
 

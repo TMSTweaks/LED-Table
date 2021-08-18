@@ -53,38 +53,17 @@ product: Peripherals v1.0
  */
 
 void BOARD_InitGPIO(void) {
-	//GPIO Config for Pin A1
-	gpio_pin_config_t pinA1Config = {
+
+
+	gpio_pin_config_t pinCConfig = {
 			kGPIO_DigitalOutput,
 			0
 	};
 
-	//GPIO Config for Pin A2
-	PORT_SetPinInterruptConfig(PORTA, 2,
-	      kPORT_InterruptLogicZero);
-	NVIC_EnableIRQ(PORTA_IRQn);
-	gpio_pin_config_t pinA2Config = {
-			kGPIO_DigitalInput,
-			0
-	};
 
 
-	gpio_pin_config_t pinBConfig = {
-			kGPIO_DigitalOutput,
-			1
-	};
 
-	gpio_pin_config_t pinDConfig = {
-				kGPIO_DigitalOutput,
-				1
-	};
-
-	GPIO_PinInit(GPIOA, 1, &pinA1Config);
-	GPIO_PinInit(GPIOA, 2, &pinA2Config);
-	GPIO_PinInit(BOARD_LED_GREEN_GPIO, 19U, &pinBConfig);
-	GPIO_PinInit(BOARD_LED_GREEN_GPIO, 18U, &pinBConfig);
-	GPIO_PinInit(GPIOD, 1, &pinDConfig);
-
+	GPIO_PinInit(GPIOC, 0, &pinCConfig);
 
 }
 

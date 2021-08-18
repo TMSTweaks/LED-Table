@@ -53,15 +53,25 @@
 #define TPM2_C1_OF 35
 
 #define NUM_BITS_PIXEL 24 //each pixel has 24 bits for GRB (8:8:8)
-#define NUM_LEDS 3
+#define NUM_LEDS 16
 
 
-static const uint32_t resetValue = (1<<1);
+static const uint32_t resetValue = (1<<0);
 
 
 
 
 static uint32_t transmitBuffer[NUM_BITS_PIXEL*NUM_LEDS];
+
+static int r[8];
+static int g[8];
+static int b[8];
+
+static int r2[8];
+static int g2[8];
+static int b2[8];
+
+
 
 
 /*
@@ -69,6 +79,7 @@ static uint32_t transmitBuffer[NUM_BITS_PIXEL*NUM_LEDS];
  */
 
 void BOARD_InitTPM(void) {
+
 	tpm_config_t tpmInfo = {
 			  .prescale = kTPM_Prescale_Divide_1,
 			  .useGlobalTimeBase = false,
@@ -103,12 +114,10 @@ void BOARD_InitTPM(void) {
 
 	TPM2->MOD = 60;
 
-
 }
 
 void BOARD_InitDMA(void) {
 
-	//g_DMA_Transfer_Complete = false;
 
 	DMAMUX_Init(DMAMUX0);
 	DMA_Init(DMA0);
@@ -118,7 +127,7 @@ void BOARD_InitDMA(void) {
 	dma_transfer_config_t transferConfig0;
 	memset(&transferConfig0, 0, sizeof(transferConfig0));
 	transferConfig0.srcAddr = (uint32_t)&resetValue;
-	transferConfig0.destAddr = (uint32_t)&GPIOA->PSOR;
+	transferConfig0.destAddr = (uint32_t)&GPIOC->PSOR;
 	transferConfig0.enableSrcIncrement = false;
 	transferConfig0.enableDestIncrement = false;
 	transferConfig0.srcSize = kDMA_Transfersize32bits;
@@ -135,7 +144,7 @@ void BOARD_InitDMA(void) {
 	dma_transfer_config_t transferConfig1;
 	memset(&transferConfig1, 0, sizeof(transferConfig1));
 	transferConfig1.srcAddr = (uint32_t)&resetValue;
-	transferConfig1.destAddr = (uint32_t)&GPIOA->PDOR;
+	transferConfig1.destAddr = (uint32_t)&GPIOC->PDOR;
 	transferConfig1.enableSrcIncrement = true;
 	transferConfig1.enableDestIncrement = false;
 	transferConfig1.srcSize = kDMA_Transfersize32bits;
@@ -152,7 +161,7 @@ void BOARD_InitDMA(void) {
 	dma_transfer_config_t transferConfig;
 	memset(&transferConfig, 0, sizeof(transferConfig));
 	transferConfig.srcAddr = (uint32_t)&resetValue;
-	transferConfig.destAddr = (uint32_t)&GPIOA->PCOR;
+	transferConfig.destAddr = (uint32_t)&GPIOC->PCOR;
 	transferConfig.enableSrcIncrement = false;
 	transferConfig.enableDestIncrement = false;
 	transferConfig.srcSize = kDMA_Transfersize32bits;
@@ -168,11 +177,12 @@ void BOARD_InitDMA(void) {
 	DMA_EnableChannelRequest(DMA0, DMA_CHANNEL_1);
 	DMA_EnableChannelRequest(DMA0, DMA_CHANNEL_2);
 
+
 }
 
 void Transfer(uint32_t address, size_t numOfBytes) {
 
-	NVIC_DisableIRQ(PORTA_IRQn); //disable interrupts at start of transfer
+	DisableInterrupts();
 
 	uint32_t channelZeroDone, channelOneDone, channelTwoDone;
 
@@ -219,7 +229,6 @@ void Transfer(uint32_t address, size_t numOfBytes) {
 		}
 	}
 
-
 	//Un-Mux DMA Channels
 	DMAMUX_DisableChannel(DMAMUX0, DMA_CHANNEL_0);
 	DMAMUX_DisableChannel(DMAMUX0, DMA_CHANNEL_1);
@@ -235,47 +244,15 @@ void Transfer(uint32_t address, size_t numOfBytes) {
 	StopTimer();
 
 	//Wait at least 50 microseconds
-	int i;
-	for (i = 0; i < 10; i++) {
-		//Do nothing
-	}
+	Wait(10);
 
-	NVIC_EnableIRQ(PORTA_IRQn); //Re-enable interrupts
+	EnableInterrupts();
 
 }
 
-void ClearLEDs(void) {
-	int i;
-	for (i = 0; i<NUM_BITS_PIXEL*NUM_LEDS; i++) {
-		transmitBuffer[i] = (0<<1);
-	}
-}
-
-void SetLEDs(int rVAL, int gVAL, int bVAL) {
-
-	NVIC_DisableIRQ(PORTA_IRQn);
-
-	int i;
-
-	//Move the bits into the transmitBuffer
-	for (i = 0; i < NUM_LEDS; i++) {
-		SetLED(i, rVAL, gVAL, bVAL);
-	}
-
-	NVIC_EnableIRQ(PORTA_IRQn);
-}
-
-void SetLED(int led, int rVAL, int gVAL, int bVAL) {
-
-	NVIC_DisableIRQ(PORTA_IRQn);
-
-	int i, n, t;
-
-	int r[8];
-	int g[8];
-	int b[8];
-
+void SetPrimaryColor(int rVAL, int gVAL, int bVAL) {
 	//Convert rgb values to binary
+	int i;
 	for (i = 0; i < 8; i++) {
 		if (rVAL > 0) {
 			r[i] = rVAL%2;
@@ -305,35 +282,115 @@ void SetLED(int led, int rVAL, int gVAL, int bVAL) {
 			b[i] = 0;
 		}
 	}
+}
 
-	//Move bits into transmitBuffer
-	t = 0;
-	for (n = 0 + (led*NUM_BITS_PIXEL); n < 8 + (led*NUM_BITS_PIXEL); n++) {
-		transmitBuffer[n] = (g[t] << 1);
-		t++;
-	}
-	t = 0;
-	for (n = 8 + (led*NUM_BITS_PIXEL); n < 16 + (led*NUM_BITS_PIXEL); n++) {
-		transmitBuffer[n] = (r[t] << 1);
-		t++;
-	}
-	t = 0;
-	for (n = 16 + (led*NUM_BITS_PIXEL); n < 24 + (led*NUM_BITS_PIXEL); n++) {
-		transmitBuffer[n] = (b[t] << 1);
-		t++;
+void SetSecondaryColor(int rVAL, int gVAL, int bVAL) {
+	//Convert rgb values to binary
+	int i;
+	for (i = 0; i < 8; i++) {
+		if (rVAL > 0) {
+			r2[i] = rVAL%2;
+			rVAL = rVAL/2;
+		}
+		else {
+			r2[i] = 0;
+		}
 	}
 
-	NVIC_EnableIRQ(PORTA_IRQn);
+	for (i = 0; i < 8; i++) {
+		if (gVAL > 0) {
+			g2[i] = gVAL%2;
+			gVAL = gVAL/2;
+		}
+		else {
+			g2[i] = 0;
+		}
+	}
+
+	for (i = 0; i < 8; i++) {
+		if (bVAL > 0) {
+			b2[i] = bVAL%2;
+			bVAL = bVAL/2;
+		}
+		else {
+			b2[i] = 0;
+		}
+	}
 
 }
-void PORTA_IRQHandler(void) {
-	if (~(GPIOA->PDIR & (1<<2))) {
-		SetLED(1, 0, 0, 255);
-		PushLEDs();
+
+void ClearLEDs(void) {
+
+	int i;
+	for (i = 0; i<NUM_BITS_PIXEL*NUM_LEDS; i++) {
+		transmitBuffer[i] = (0<<0);
 	}
-	PORT_ClearPinsInterruptFlags(PORTA, true);
-	PORTA->PCR[2] |= (1<<24);
+
 }
+
+void SetLEDs(bool primary) {
+
+
+	int i;
+	//Move the bits into the transmitBuffer
+	for (i = 0; i < NUM_LEDS; i++) {
+		SetLED(i, primary);
+	}
+
+	/*for (i = 0; i < 1000; i++) {
+		//Do nothing
+	} */
+
+
+}
+
+void SetLED(int led, bool primary) {
+
+	//DisableInterrupts();
+
+	int n, t;
+	if (primary) {
+		//Move bits into transmitBuffer
+		t = 0;
+		for (n = 0 + (led*NUM_BITS_PIXEL); n < 8 + (led*NUM_BITS_PIXEL); n++) {
+			transmitBuffer[n] = (g[t] << 0);
+			t++;
+		}
+		t = 0;
+		for (n = 8 + (led*NUM_BITS_PIXEL); n < 16 + (led*NUM_BITS_PIXEL); n++) {
+			transmitBuffer[n] = (r[t] << 0);
+			t++;
+		}
+		t = 0;
+		for (n = 16 + (led*NUM_BITS_PIXEL); n < 24 + (led*NUM_BITS_PIXEL); n++) {
+			transmitBuffer[n] = (b[t] << 0);
+			t++;
+		}
+	}
+	else {
+		//Move bits into transmitBuffer
+		t = 0;
+		for (n = 0 + (led*NUM_BITS_PIXEL); n < 8 + (led*NUM_BITS_PIXEL); n++) {
+			transmitBuffer[n] = (g2[t] << 0);
+			t++;
+		}
+		t = 0;
+		for (n = 8 + (led*NUM_BITS_PIXEL); n < 16 + (led*NUM_BITS_PIXEL); n++) {
+			transmitBuffer[n] = (r2[t] << 0);
+			t++;
+		}
+		t = 0;
+		for (n = 16 + (led*NUM_BITS_PIXEL); n < 24 + (led*NUM_BITS_PIXEL); n++) {
+			transmitBuffer[n] = (b2[t] << 0);
+			t++;
+		}
+
+	}
+
+	//EnableInterrupts();
+
+}
+
 
 void PushLEDs(void) {
 
@@ -341,13 +398,233 @@ void PushLEDs(void) {
 
 }
 
+void PORTA_IRQHandler(void) {
+
+	PushLEDs();
+
+	if (PORTD->PCR[2] & (1<<24)) {
+		SetLED(9, false);
+	}
+	else {
+		SetLED(9, true);
+	}
+	if (PORTA->PCR[2] & (1<<24)) {
+		SetLED(1, false);
+	}
+	else {
+		SetLED(1, true);
+	}
+	if (PORTA->PCR[1] & (1<<24)) {
+		SetLED(0, false);
+	}
+	else {
+		SetLED(0, true);
+	}
+	if (PORTA->PCR[12] & (1<<24)) {
+		SetLED(3, false);
+	}
+	else {
+		SetLED(3, true);
+	}
+	if (PORTD->PCR[4] & (1<<24)) {
+		SetLED(2, false);
+	}
+	else {
+		SetLED(2, true);
+	}
+	if (PORTA->PCR[5] & (1<<24)) {
+		SetLED(6, false);
+	}
+	else {
+		SetLED(6, true);
+	}
+	if (PORTD->PCR[3] & (1<<24)) {
+		SetLED(10, false);
+	}
+	else {
+		SetLED(10, true);
+	}
+	if (PORTD->PCR[1] & (1<<24)) {
+		SetLED(11, false);
+	}
+	else {
+		SetLED(11, true);
+	}
+	if (PORTA->PCR[16] & (1<<24)) {
+		SetLED(15, false);
+	}
+	else {
+		SetLED(15, true);
+	}
+	if (PORTA->PCR[17] & (1<<24)) {
+		SetLED(14, false);
+	}
+	else {
+		SetLED(14, true);
+	}
+	if (PORTD->PCR[6] & (1<<24)) {
+		SetLED(13, false);
+	}
+	else {
+		SetLED(13, true);
+	}
+	if (PORTD->PCR[7] & (1<<24)) {
+		SetLED(12, false);
+	}
+	else {
+		SetLED(12, true);
+	}
+	if (PORTD->PCR[5] & (1<<24)) {
+		SetLED(4, false);
+	}
+	else {
+		SetLED(4, true);
+	}
+	if (PORTD->PCR[2] & (1<<24)) {
+		SetLED(9, false);
+	}
+	else {
+		SetLED(9, true);
+	}
+	if (PORTA->PCR[13] & (1<<24)) {
+		SetLED(5, false);
+	}
+	else {
+		SetLED(5, true);
+	}
+	if (PORTD->PCR[0] & (1<<24)) {
+		SetLED(8, false);
+	}
+	else {
+		SetLED(8, true);
+	}
+	if (PORTA->PCR[4] & (1<<24)) {
+		SetLED(7, false);
+	}
+	else {
+		SetLED(7, true);
+	}
+
+
+	PORT_ClearPinsInterruptFlags(PORTA, true);
+	PORT_ClearPinsInterruptFlags(PORTD, true);
+	PORTA->PCR[1] |= (1<<24);
+	PORTA->PCR[2] |= (1<<24);
+	PORTA->PCR[12] |= (1<<24);
+	PORTD->PCR[4] |= (1<<24);
+	PORTA->PCR[5] |= (1<<24);
+	PORTD->PCR[2] |= (1<<24);
+	PORTD->PCR[3] |= (1<<24);
+	PORTD->PCR[1] |= (1<<24);
+	PORTA->PCR[16] |= (1<<24);
+	PORTA->PCR[17] |= (1<<24);
+	PORTD->PCR[6] |= (1<<24);
+	PORTD->PCR[7] |= (1<<24);
+	PORTD->PCR[5] |= (1<<24);
+	PORTD->PCR[2] |= (1<<24);
+	PORTA->PCR[13] |= (1<<24);
+	PORTD->PCR[0] |= (1<<24);
+	PORTA->PCR[4] |= (1<<24);
+
+}
+
+void PORTD_IRQHandler(void) {
+	/*SetLED(1, 0, 0, 255);
+	if (PORTA->PCR[2] & (1<<24)) {
+		SetLED(1, 255, 0, 0);
+		PushLEDs();
+	}
+
+	SetLED(0, 0, 0, 255);
+	if (PORTA->PCR[1] & (1<<24)) {
+		SetLED(0, 255, 0, 0);
+		PushLEDs();
+	}
+
+	SetLED(3, 0, 0, 255);
+	if (PORTA->PCR[12] & (1<<24)) {
+		SetLED(3, 255, 0, 0);
+		PushLEDs();
+	}
+
+	SetLED(2, 0, 0, 255);
+	if (PORTD->PCR[4] & (1<<24)) {
+		SetLED(2, 255, 0, 0);
+		PushLEDs();
+	}
+
+	PORT_ClearPinsInterruptFlags(PORTD, true);
+	PORT_ClearPinsInterruptFlags(PORTA, true);
+	PORTA->PCR[1] |= (1<<24);
+	PORTA->PCR[2] |= (1<<24);
+	PORTA->PCR[12] |= (1<<24);
+	PORTD->PCR[4] |= (1<<24); */
+
+	PORTA_IRQHandler();
+}
+
 
 void InitLED(void) {
 	BOARD_InitTPM();
 	BOARD_InitDMA();
 	ClearLEDs();
-	SetLED(0, 255, 0, 0);
+	SetPrimaryColor(0, 0, 255);
+	SetSecondaryColor(255, 0, 0);
+	SetLEDs(true);
 	PushLEDs();
+}
+
+void InitSensors(void) {
+
+	gpio_pin_config_t pinConfig = {
+				kGPIO_DigitalInput,
+				0
+		};
+
+
+		//GPIO Config for Pin A
+
+		PORT_SetPinInterruptConfig(PORTA, 1, kPORT_InterruptLogicZero);
+		PORT_SetPinInterruptConfig(PORTA, 2, kPORT_InterruptLogicZero);
+		PORT_SetPinInterruptConfig(PORTA, 12, kPORT_InterruptLogicZero);
+		PORT_SetPinInterruptConfig(PORTA, 5, kPORT_InterruptLogicZero);
+		PORT_SetPinInterruptConfig(PORTA, 16, kPORT_InterruptLogicZero);
+		PORT_SetPinInterruptConfig(PORTA, 17, kPORT_InterruptLogicZero);
+		PORT_SetPinInterruptConfig(PORTA, 13, kPORT_InterruptLogicZero);
+		PORT_SetPinInterruptConfig(PORTA, 4, kPORT_InterruptLogicZero);
+		NVIC_EnableIRQ(PORTA_IRQn);
+
+		PORT_SetPinInterruptConfig(PORTD, 4, kPORT_InterruptLogicZero);
+		PORT_SetPinInterruptConfig(PORTD, 2, kPORT_InterruptLogicZero);
+		PORT_SetPinInterruptConfig(PORTD, 3, kPORT_InterruptLogicZero);
+		PORT_SetPinInterruptConfig(PORTD, 1, kPORT_InterruptLogicZero);
+		PORT_SetPinInterruptConfig(PORTD, 6, kPORT_InterruptLogicZero);
+		PORT_SetPinInterruptConfig(PORTD, 7, kPORT_InterruptLogicZero);
+		PORT_SetPinInterruptConfig(PORTD, 5, kPORT_InterruptLogicZero);
+		PORT_SetPinInterruptConfig(PORTD, 2, kPORT_InterruptLogicZero);
+		PORT_SetPinInterruptConfig(PORTD, 0, kPORT_InterruptLogicZero);
+
+		NVIC_EnableIRQ(PORTD_IRQn);
+
+		GPIO_PinInit(GPIOA, 1, &pinConfig);
+		GPIO_PinInit(GPIOA, 2, &pinConfig);
+		GPIO_PinInit(GPIOA, 12, &pinConfig);
+		GPIO_PinInit(GPIOA, 5, &pinConfig);
+		GPIO_PinInit(GPIOA, 16, &pinConfig);
+		GPIO_PinInit(GPIOA, 17, &pinConfig);
+		GPIO_PinInit(GPIOA, 13, &pinConfig);
+		GPIO_PinInit(GPIOA, 4, &pinConfig);
+
+		GPIO_PinInit(GPIOD, 4, &pinConfig);
+		GPIO_PinInit(GPIOD, 2, &pinConfig);
+		GPIO_PinInit(GPIOD, 3, &pinConfig);
+		GPIO_PinInit(GPIOD, 1, &pinConfig);
+		GPIO_PinInit(GPIOD, 6, &pinConfig);
+		GPIO_PinInit(GPIOD, 7, &pinConfig);
+		GPIO_PinInit(GPIOD, 5, &pinConfig);
+		GPIO_PinInit(GPIOD, 2, &pinConfig);
+		GPIO_PinInit(GPIOD, 0, &pinConfig);
+
 }
 
 void StartTimer(void) {
@@ -358,6 +635,22 @@ void StopTimer(void) {
 	TPM_StopTimer(TPM2);
 }
 
+void EnableInterrupts(void) {
+	NVIC_EnableIRQ(PORTA_IRQn);
+	NVIC_EnableIRQ(PORTD_IRQn);
+}
+
+void DisableInterrupts(void) {
+	NVIC_DisableIRQ(PORTA_IRQn);
+	NVIC_DisableIRQ(PORTD_IRQn);
+}
+
+void Wait(int i) {
+	int v;
+	for (v = 0; v < i; v++) {
+
+	}
+}
 
 int main(void) {
 
@@ -369,10 +662,13 @@ int main(void) {
     /* Init FSL debug console. */
     BOARD_InitDebugConsole();
 #endif
-
     InitLED();
+    InitSensors();
     while(1) {
-    	SetLEDs(0, 255, 200);
+    	DisableInterrupts();
+    	Wait(1000);
+    	SetLEDs(true);
     	PushLEDs();
+    	EnableInterrupts();
     }
 }
